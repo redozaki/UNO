@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>UNO‑Inspired Layout</title>
+  <style>
+    /* ---- Layout ---- */
+    body, html {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      font-family: sans-serif;
+      display: flex; flex-direction: column;
+      background: #2b2b2b;
+      color: #fff;
+    }
+    #game-container {
+      flex: 1;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    #center-area {
+      display: flex; align-items: center; gap: 40px;
+      margin-bottom: 50px;
+    }
+    #hand-area {
+      display: flex; gap: 12px;
+      padding: 20px 0;
+    }
+
+    /* ---- UNO‑Style Card ---- */
+    .card {
+      position: relative;
+      width: 100px; height: 150px;
+      border-radius: 12px;
+      border: 4px solid #fff;
+      box-shadow: 2px 4px 8px rgba(0,0,0,0.5);
+      cursor: pointer;
+      user-select: none;
+      background: var(--bg-color, #888);
+      transition: transform 0.1s;
+    }
+    .card:active { transform: translateY(2px); }
+    .card.disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* Color Definitions */
+    .red    { --bg-color: #D32F2F; }
+    .yellow { --bg-color: #FBC02D; }
+    .green  { --bg-color: #388E3C; }
+    .blue   { --bg-color: #1976D2; }
+
+    /* Corner pips */
+    .card::before,
+    .card::after {
+      content: attr(data-value);
+      position: absolute;
+      font-size: 16px;
+      font-weight: bold;
+      color: #fff;
+      font-family: 'Arial Black', sans-serif;
+    }
+    .card::before {
+      top: 8px; left: 8px;
+    }
+    .card::after {
+      bottom: 8px; right: 8px;
+      transform: rotate(180deg);
+    }
+
+    /* Center circle with number */
+    .card .inner {
+      width: 60px; height: 60px;
+      background: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .card .inner span {
+      font-size: 36px;
+      font-weight: bold;
+      color: var(--bg-color);
+      font-family: 'Arial Black', sans-serif;
+    }
+
+    /* Draw‑Deck Back Style */
+    .back {
+      background: linear-gradient(135deg, #444, #222);
+      border: 4px solid #111;
+      color: transparent;
+    }
+    .back::before,
+    .back::after {
+      content: "UNO";
+      position: absolute;
+      font-size: 20px;
+      color: #fff;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%) rotate(-15deg);
+      letter-spacing: 2px;
+      font-family: 'Arial Black', sans-serif;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="game-container">
+    <div id="center-area">
+      <!-- Last played card -->
+      <div id="last-played" class="card" data-value="?">
+        <div class="inner"><span>?</span></div>
+      </div>
+      <!-- Draw deck -->
+      <div id="draw-deck" class="card back"></div>
+    </div>
+    <!-- Player’s hand -->
+    <div id="hand-area"></div>
+  </div>
+
+  <script>
+    const apiBase = `${window.location.protocol}//${window.location.hostname}:8000/api`;
+    let gameId;
+    let playerId;
+    const handArea = document.getElementById('hand-area');
+    const lastPlayedEl = document.getElementById('last-played');
+
+    // Fetch game state (hand, last_played, playable_cards)
+    async function fetchGameState() {
+      const res = await fetch(`${apiBase}/game-state/?game_id=${gameId}&player_id=${playerId}`);
+      const data = await res.json();
+      updateUI(data);
+    }
+
+    function updateUI({ hand, last_played, playable_cards }) {
+      // Update last played card
+      lastPlayedEl.className = `card ${last_played.color}`;
+      lastPlayedEl.setAttribute('data-value', last_played.value);
+      lastPlayedEl.querySelector('.inner span').textContent = last_played.value;
+
+      // Render player hand
+      handArea.innerHTML = '';
+      hand.forEach(card => {
+        const el = document.createElement('div');
+        el.classList.add('card', card.color);
+        el.setAttribute('data-value', card.value);
+        if (!playable_cards.some(pc => pc.color === card.color && pc.value === card.value)) {
+          el.classList.add('disabled');
+        }
+        const inner = document.createElement('div');
+        inner.classList.add('inner');
+        inner.innerHTML = `<span>${card.value}</span>`;
+        el.appendChild(inner);
+        el.onclick = () => playCard(card);
+        handArea.appendChild(el);
+      });
+    }
+
+    // Send play-card request
+    async function playCard(card) {
+      const res = await fetch(`${apiBase}/play-card/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ game_id: gameId, player_id: playerId, color: card.color, value: card.value })
+      });
+      const result = await res.json();
+      if (result.success) {
+        fetchGameState();
+      } else {
+        alert(result.error || 'Invalid move');
+      }
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      gameId = prompt('Enter Game ID:');
+      playerId = prompt('Enter Your Player ID or Name:');
+      fetchGameState();
+      // Poll every 3s for updates
+      setInterval(fetchGameState, 3000);
+    });
+  </script>
+
+</body>
+</html>
